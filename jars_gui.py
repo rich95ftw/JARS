@@ -108,11 +108,34 @@ for lbl, var in [
 
 def plot_geometry():
     try:
-        tx_pos = Position(tx_x_var.get(), tx_y_var.get(), tx_z_var.get())
-        jam_pos = Position(jam_x_var.get(), jam_y_var.get(), jam_z_var.get())
-        rx_pos = Position(rx_x_var.get(), rx_y_var.get(), rx_z_var.get())
+        tx = RadioSource(
+            power_dbm=tx_power_var.get(),
+            frequency_mhz=tx_freq_var.get(),
+            position=Position(tx_x_var.get(), tx_y_var.get(), tx_z_var.get())
+        )
+        jammer = RadioSource(
+            power_dbm=jammer_power_var.get(),
+            frequency_mhz=jammer_freq_var.get(),
+            position=Position(jam_x_var.get(), jam_y_var.get(), jam_z_var.get())
+        )
+        rx = Receiver(
+            sensitivity_dbm=rx_sens_var.get(),
+            position=Position(rx_x_var.get(), rx_y_var.get(), rx_z_var.get())
+        )
 
-        fig, ax = plt.subplots(figsize=(5, 4))
+        # Geometry
+        tx_pos = tx.position
+        jam_pos = jammer.position
+        rx_pos = rx.position
+
+        tx_dist = tx_pos.distance_to(rx_pos)
+        jam_dist = jam_pos.distance_to(rx_pos)
+        tx_recv = received_power_dbm(tx, rx_pos)
+        jam_recv = received_power_dbm(jammer, rx_pos)
+        j_s = jam_recv - tx_recv
+
+        # Plot
+        fig, ax = plt.subplots(figsize=(6, 5))
         ax.set_title("JARS Geometry Plot")
         ax.set_xlabel("X (m)")
         ax.set_ylabel("Y (m)")
@@ -121,8 +144,22 @@ def plot_geometry():
         ax.scatter(jam_pos.x, jam_pos.y, color='red', label='Jammer')
         ax.scatter(rx_pos.x, rx_pos.y, color='green', label='Receiver')
 
-        ax.plot([tx_pos.x, rx_pos.x], [tx_pos.y, rx_pos.y], 'b--', label='Tx to Rx')
-        ax.plot([jam_pos.x, rx_pos.x], [jam_pos.y, rx_pos.y], 'r--', label='Jam to Rx')
+        ax.plot([tx_pos.x, rx_pos.x], [tx_pos.y, rx_pos.y], 'b--')
+        ax.plot([jam_pos.x, rx_pos.x], [jam_pos.y, rx_pos.y], 'r--')
+
+        # Annotations
+        ax.annotate(f"Tx → Rx\n{tx_dist:.1f} m\n{tx_recv:.1f} dBm",
+                    xy=((tx_pos.x + rx_pos.x)/2, (tx_pos.y + rx_pos.y)/2),
+                    ha='center', va='bottom', color='blue')
+
+        ax.annotate(f"Jam → Rx\n{jam_dist:.1f} m\n{jam_recv:.1f} dBm",
+                    xy=((jam_pos.x + rx_pos.x)/2, (jam_pos.y + rx_pos.y)/2),
+                    ha='center', va='bottom', color='red')
+
+        ax.annotate(f"J/S = {j_s:.1f} dB",
+                    xy=(rx_pos.x, rx_pos.y), xytext=(rx_pos.x + 30, rx_pos.y + 30),
+                    arrowprops=dict(arrowstyle="->", color='black'), fontsize=10,
+                    bbox=dict(boxstyle="round", facecolor="white", edgecolor="gray"))
 
         ax.legend()
         ax.grid(True)
