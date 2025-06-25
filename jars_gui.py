@@ -2,6 +2,9 @@ import tkinter as tk
 from tkinter import ttk
 from math import log10, sqrt
 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
 class Position:
     def __init__(self, x, y, z):
         self.x = float(x)
@@ -103,7 +106,39 @@ for lbl, var in [
 ]:
     make_input(lbl, var).pack()
 
+def plot_geometry():
+    try:
+        tx_pos = Position(tx_x_var.get(), tx_y_var.get(), tx_z_var.get())
+        jam_pos = Position(jam_x_var.get(), jam_y_var.get(), jam_z_var.get())
+        rx_pos = Position(rx_x_var.get(), rx_y_var.get(), rx_z_var.get())
+
+        fig, ax = plt.subplots(figsize=(5, 4))
+        ax.set_title("JARS Geometry Plot")
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+
+        ax.scatter(tx_pos.x, tx_pos.y, color='blue', label='Transmitter')
+        ax.scatter(jam_pos.x, jam_pos.y, color='red', label='Jammer')
+        ax.scatter(rx_pos.x, rx_pos.y, color='green', label='Receiver')
+
+        ax.plot([tx_pos.x, rx_pos.x], [tx_pos.y, rx_pos.y], 'b--', label='Tx to Rx')
+        ax.plot([jam_pos.x, rx_pos.x], [jam_pos.y, rx_pos.y], 'r--', label='Jam to Rx')
+
+        ax.legend()
+        ax.grid(True)
+
+        # Embed in Tkinter
+        top = tk.Toplevel(root)
+        top.title("Geometry Plot")
+        canvas = FigureCanvasTkAgg(fig, master=top)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    except Exception as e:
+        result_label.config(text=f"Plot error: {e}")
+
 ttk.Button(root, text="Run Simulation", command=run_simulation).pack(pady=10)
+ttk.Button(root, text="Plot Geometry", command=plot_geometry).pack(pady=5)
 result_label = ttk.Label(root, text="")
 result_label.pack()
 
