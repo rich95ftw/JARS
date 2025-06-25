@@ -156,9 +156,22 @@ def plot_geometry():
                     xy=((jam_pos.x + rx_pos.x)/2, (jam_pos.y + rx_pos.y)/2),
                     ha='center', va='bottom', color='red')
 
+        # Annotation offset
+        offset_x = 30
+        offset_y = 30
+
+        # Compute limits from data
+        x_vals = [tx_pos.x, jam_pos.x, rx_pos.x]
+        y_vals = [tx_pos.y, jam_pos.y, rx_pos.y]
+        x_min, x_max = min(x_vals), max(x_vals)
+        y_min, y_max = min(y_vals), max(y_vals)
+
+        # Clamp annotation position
+        anno_x = min(max(rx_pos.x + offset_x, x_min), x_max)
+        anno_y = min(max(rx_pos.y + offset_y, y_min), y_max)
+
         ax.annotate(f"J/S = {j_s:.1f} dB",
-                    xy=(rx_pos.x, rx_pos.y), xytext=(rx_pos.x + 30, rx_pos.y + 30),
-                    arrowprops=dict(arrowstyle="->", color='black'), fontsize=10,
+                    xy=(rx_pos.x, rx_pos.y), xytext=(anno_x, anno_y),
                     bbox=dict(boxstyle="round", facecolor="white", edgecolor="gray"))
 
         ax.legend()
