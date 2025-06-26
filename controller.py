@@ -1,4 +1,4 @@
-from model import RadioSource, Receiver, Position, j_s_ratio_db, is_jamming_successful, received_power_dbm
+from model import RadioSource, Receiver, Position, is_jamming_successful, received_power_dbm
 
 
 class SimulationController:
@@ -12,9 +12,24 @@ class SimulationController:
         return Receiver(sensitivity_dbm=sens, position=Position(x, y, z))
 
     def run_simulation(self, tx: RadioSource, jammer: RadioSource, rx: Receiver, threshold_db):
-        j_s = j_s_ratio_db(jammer, tx, rx)
-        success = is_jamming_successful(j_s, threshold_db)
-        return j_s, success
+        tx_to_rx_power_dbm = received_power_dbm(tx, rx.position)
+        jam_to_rx_power_dbm = received_power_dbm(jammer, rx.position)
+        j_s_db = jam_to_rx_power_dbm - tx_to_rx_power_dbm
+        
+        success = is_jamming_successful(j_s_db, threshold_db, tx_to_rx_power_dbm, rx.sensitivity_dbm)
+
+        print(f"Tx to Rx Power: {tx_to_rx_power_dbm:.2f} dBm, Jammer to Rx Power: {jam_to_rx_power_dbm:.2f} dBm")
+        print(f"J/S Ratio: {j_s_db:.2f}")
+        print(f"Sensitivity: {rx.sensitivity_dbm} dBm")
+        print(f"Success: {success}")
+        print
+
+        return {
+            "j_s_db": j_s_db,
+            "tx_recv_dbm": tx_to_rx_power_dbm,
+            "jam_recv_dbm": jam_to_rx_power_dbm,
+            "success": success
+        }
 
     def get_received_powers(self, tx: RadioSource, jammer: RadioSource, rx: Receiver):
         tx_recv = received_power_dbm(tx, rx.position)
