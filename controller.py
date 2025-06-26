@@ -1,4 +1,8 @@
-from model import RadioSource, Receiver, Position, is_jamming_successful, received_power_dbm
+from model import (
+    RadioSource, Receiver, Position,
+    received_power_dbm,
+    is_communication_successful
+)
 
 
 class SimulationController:
@@ -11,24 +15,31 @@ class SimulationController:
     def create_receiver(self, sens, x, y, z):
         return Receiver(sensitivity_dbm=sens, position=Position(x, y, z))
 
-    def run_simulation(self, tx: RadioSource, jammer: RadioSource, rx: Receiver, threshold_db):
+    def run_simulation(self, tx: RadioSource, jammer: RadioSource, rx: Receiver, j_s_threshold_db):
         tx_to_rx_power_dbm = received_power_dbm(tx, rx.position)
         jam_to_rx_power_dbm = received_power_dbm(jammer, rx.position)
         j_s_db = jam_to_rx_power_dbm - tx_to_rx_power_dbm
-        
-        success = is_jamming_successful(j_s_db, threshold_db, tx_to_rx_power_dbm, rx.sensitivity_dbm)
 
-        print(f"Tx to Rx Power: {tx_to_rx_power_dbm:.2f} dBm, Jammer to Rx Power: {jam_to_rx_power_dbm:.2f} dBm")
-        print(f"J/S Ratio: {j_s_db:.2f}")
-        print(f"Sensitivity: {rx.sensitivity_dbm} dBm")
-        print(f"Success: {success}")
-        print
+        communication_success = is_communication_successful(
+            signal_dbm=tx_to_rx_power_dbm,
+            sensitivity_dbm=rx.sensitivity_dbm,
+            j_s_db=j_s_db,
+            j_s_threshold_db=j_s_threshold_db
+        )
+
+        jamming_success = (tx_to_rx_power_dbm >= rx.sensitivity_dbm) and (j_s_db > j_s_threshold_db)
+
+        print(f"Tx → Rx Power: {tx_to_rx_power_dbm:.2f} dBm")
+        print(f"Jam → Rx Power: {jam_to_rx_power_dbm:.2f} dBm")
+        print(f"J/S Ratio: {j_s_db:.2f} dB")
+        print(f"Rx Sensitivity: {rx.sensitivity_dbm:.2f} dBm")
+        print(f"Communication Success: {communication_success}")
 
         return {
             "j_s_db": j_s_db,
             "tx_recv_dbm": tx_to_rx_power_dbm,
             "jam_recv_dbm": jam_to_rx_power_dbm,
-            "success": success
+            "communication_success": communication_success
         }
 
     def get_received_powers(self, tx: RadioSource, jammer: RadioSource, rx: Receiver):

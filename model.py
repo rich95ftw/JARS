@@ -43,12 +43,17 @@ def j_s_ratio_db(jammer, transmitter, receiver):
     s_recv = received_power_dbm(transmitter, receiver.position)
     return j_recv - s_recv
 
-# Check if jamming is successful based on the J/S ratio, threshold, and receiver sensitivity
-# Returns True if jamming is successful, False otherwise
-def is_jamming_successful(j_s_db, threshold_db, signal_dbm, sensitivity_dbm):
+def is_communication_successful(signal_dbm, sensitivity_dbm, j_s_db, j_s_threshold_db):
     if signal_dbm < sensitivity_dbm:
-        return False  # Receiver can't detect the signal at all
-    return j_s_db > threshold_db
+        return False  # Signal too weak
+    if j_s_db > j_s_threshold_db:
+        return False  # Jamming too strong
+    return True
+
+def is_jamming_successful(j_s_db, j_s_threshold_db, signal_dbm, sensitivity_dbm):
+    if signal_dbm < sensitivity_dbm:
+        return False  # Signal was too weak to begin with — not a jammer’s "win"
+    return j_s_db > j_s_threshold_db  # Jammer overpowered the usable signal
 
 
 

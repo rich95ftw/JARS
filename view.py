@@ -97,12 +97,16 @@ class JarsGUI(tk.Tk):
             )
             threshold = self.vars['threshold'].get()
 
-            results = self.controller.run_simulation(tx, jammer, rx, threshold)
+            results = self.controller.run_simulation(tx, jammer, rx, threshold)  # ✅ Missing call added here
             j_s = results["j_s_db"]
-            success = results["success"]
+            comm_success = results["communication_success"]
 
             result_text = f"J/S ratio: {j_s:.2f} dB\n"
-            result_text += "Jamming is likely SUCCESSFUL." if success else "Jamming is likely UNSUCCESSFUL."
+            if comm_success:
+                result_text += "Communication is likely SUCCESSFUL."
+            else:
+                result_text += "Communication is likely BLOCKED."
+
             self.result_label.config(text=result_text)
         except Exception as e:
             self.result_label.config(text=f"Error: {e}")
@@ -143,7 +147,7 @@ class JarsGUI(tk.Tk):
             tx_recv = results["tx_recv_dbm"]
             jam_recv = results["jam_recv_dbm"]
             j_s = results["j_s_db"]
-            success = results["success"]
+            comm_success = results["communication_success"]
 
             tx_dist = tx_pos.distance_to(rx_pos)
             jam_dist = jam_pos.distance_to(rx_pos)
@@ -163,8 +167,8 @@ class JarsGUI(tk.Tk):
                     verticalalignment='top',
                     bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
-            status_text = "Jamming success" if success else "Jamming failure"
-            status_color = 'lightgreen' if success else '#ffcccb'
+            status_text = "Communication success" if comm_success else "Communication blocked"
+            status_color = 'lightgreen' if comm_success else '#ffcccb'  # ✅ Fixed variable name
 
             ax.text(0.05, 0.87, status_text,
                     transform=ax.transAxes, fontsize=8, fontweight='bold',
