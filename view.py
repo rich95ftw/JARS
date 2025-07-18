@@ -38,7 +38,8 @@ class JarsGUI(tk.Tk):
             'rx_y': tk.DoubleVar(value=0.0),
             'rx_z': tk.DoubleVar(value=0.0),
 
-            'threshold': tk.DoubleVar(value=10.0)
+            'threshold': tk.DoubleVar(value=10.0),
+            'mc_samples': tk.IntVar(value=1000)
         }
 
     def _create_widgets(self):
@@ -80,6 +81,9 @@ class JarsGUI(tk.Tk):
         ttk.Button(button_frame, text="Plot Geometry", command=self.plot_geometry).pack(side=tk.LEFT, expand=True, padx=5)
         ttk.Button(button_frame, text="Monte Carlo", command=self.run_monte_carlo_sim).pack(side=tk.LEFT, expand=True, padx=5)
 
+        ttk.Label(button_frame, text="Samples:").pack(side=tk.LEFT)
+        ttk.Entry(button_frame, textvariable=self.vars['mc_samples'], width=6).pack(side=tk.LEFT)
+
         self.result_label = ttk.Label(self, text="Press 'Run Simulation' to see results.",
                                       padding="10", font=("", 10, "bold"))
         self.result_label.pack(fill=tk.X)
@@ -107,7 +111,7 @@ class JarsGUI(tk.Tk):
             )
             threshold = self.vars['threshold'].get()
 
-            results = self.controller.run_simulation(tx, jammer, rx, threshold)  # ✅ Missing call added here
+            results = self.controller.run_simulation(tx, jammer, rx, threshold)
             j_s = results["j_s_db"]
             comm_success = results["communication_success"]
 
@@ -123,7 +127,6 @@ class JarsGUI(tk.Tk):
     
     def run_monte_carlo_sim(self):
         try:
-        # Transmitter
             tx_power = self.vars['tx_power'].get()
             tx_freq = self.vars['tx_freq'].get()
             tx_pos = (self.vars['tx_x'].get(), self.vars['tx_y'].get(), self.vars['tx_z'].get())
@@ -152,12 +155,13 @@ class JarsGUI(tk.Tk):
             jam_z_dist = stats.norm(loc=jam_z, scale=jam_z_std)
 
             # Run MC simulation
+            N = self.vars['mc_samples'].get()
             result = self.controller.run_monte_carlo(
                 tx_power, tx_freq, tx_pos,
                 rx_sens, rx_pos,
                 jam_power_mean, jam_power_std,
                 jam_freq, jam_x_dist, jam_y_dist, jam_z_dist,
-                N=1000
+                N=N
             )
 
             # Plot histogram
