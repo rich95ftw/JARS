@@ -3,7 +3,7 @@ name = "jars"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Rich Wood",email = "rftwood@googlemail.com"}
+    {name = "Rich Wood",email = "richard.wood@morsheadconsulting.co.uk"}
 ]
 readme = "README.md"
 requires-python = ">=3.12"

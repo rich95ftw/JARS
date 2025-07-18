@@ -28,6 +28,11 @@ class JarsGUI(tk.Tk):
             'jam_y': tk.DoubleVar(value=500.0),
             'jam_z': tk.DoubleVar(value=0.0),
 
+            'jammer_power_std': tk.DoubleVar(value=2.0),     # Std dev for jammer power
+            'jammer_x_std': tk.DoubleVar(value=100.0),
+            'jammer_y_std': tk.DoubleVar(value=50.0),
+            'jammer_z_std': tk.DoubleVar(value=20.0),
+
             'rx_sens': tk.DoubleVar(value=-90.0),
             'rx_x': tk.DoubleVar(value=2000.0),
             'rx_y': tk.DoubleVar(value=0.0),
@@ -50,10 +55,14 @@ class JarsGUI(tk.Tk):
 
         self._add_input_section(input_frame, "Jammer", [
             ("Power (dBm)", 'jammer_power'),
+            ("Power Std (dB)", 'jammer_power_std'),
             ("Frequency (MHz)", 'jammer_freq'),
             ("Position X (m)", 'jam_x'),
+            ("X Std (m)", 'jammer_x_std'),
             ("Position Y (m)", 'jam_y'),
+            ("Y Std (m)", 'jammer_y_std'),
             ("Position Z (m)", 'jam_z'),
+            ("Z Std (m)", 'jammer_z_std'),
         ], column=1)
 
         self._add_input_section(input_frame, "Receiver & Threshold", [
@@ -125,11 +134,22 @@ class JarsGUI(tk.Tk):
 
             # Jammer
             jam_power_mean = self.vars['jammer_power'].get()
-            jam_power_std = 2.0  # You could make this configurable
+            jam_power_std = self.vars['jammer_power_std'].get()
             jam_freq = self.vars['jammer_freq'].get()
-            jam_x_dist = stats.uniform(loc=self.vars['jam_x'].get() - 100, scale=200)
-            jam_y_dist = stats.norm(loc=self.vars['jam_y'].get(), scale=50)
-            jam_z_dist = stats.norm(loc=self.vars['jam_z'].get(), scale=20)
+
+            jam_x = self.vars['jam_x'].get()
+            jam_x_std = self.vars['jammer_x_std'].get()
+
+            jam_y = self.vars['jam_y'].get()
+            jam_y_std = self.vars['jammer_y_std'].get()
+
+            jam_z = self.vars['jam_z'].get()
+            jam_z_std = self.vars['jammer_z_std'].get()
+            
+            # Define distributions using user values
+            jam_x_dist = stats.norm(loc=jam_x, scale=jam_x_std)
+            jam_y_dist = stats.norm(loc=jam_y, scale=jam_y_std)
+            jam_z_dist = stats.norm(loc=jam_z, scale=jam_z_std)
 
             # Run MC simulation
             result = self.controller.run_monte_carlo(
