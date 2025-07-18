@@ -16,7 +16,7 @@ mvc/
 ### Prerequisites
 
 * Python 3.8+
-* Required packages:
+* Required packages - see pyproject.toml
 
 ```bash
 pip install matplotlib
