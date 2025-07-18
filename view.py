@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
-
+from scipy import stats
 from controller import SimulationController
 
 
@@ -67,8 +67,9 @@ class JarsGUI(tk.Tk):
         button_frame = ttk.Frame(self, padding="10")
         button_frame.pack(fill=tk.X)
 
-        ttk.Button(button_frame, text="Run Simulation", command=self.run_simulation).pack(side=tk.LEFT, expand=True, padx=5)
+        ttk.Button(button_frame, text="Run", command=self.run_simulation).pack(side=tk.LEFT, expand=True, padx=5)
         ttk.Button(button_frame, text="Plot Geometry", command=self.plot_geometry).pack(side=tk.LEFT, expand=True, padx=5)
+        ttk.Button(button_frame, text="Monte Carlo", command=self.run_monte_carlo_sim).pack(side=tk.LEFT, expand=True, padx=5)
 
         self.result_label = ttk.Label(self, text="Press 'Run Simulation' to see results.",
                                       padding="10", font=("", 10, "bold"))
@@ -110,7 +111,62 @@ class JarsGUI(tk.Tk):
             self.result_label.config(text=result_text)
         except Exception as e:
             self.result_label.config(text=f"Error: {e}")
+    
+    def run_monte_carlo_sim(self):
+        try:
+        # Transmitter
+            tx_power = self.vars['tx_power'].get()
+            tx_freq = self.vars['tx_freq'].get()
+            tx_pos = (self.vars['tx_x'].get(), self.vars['tx_y'].get(), self.vars['tx_z'].get())
 
+            # Receiver
+            rx_sens = self.vars['rx_sens'].get()
+            rx_pos = (self.vars['rx_x'].get(), self.vars['rx_y'].get(), self.vars['rx_z'].get())
+
+            # Jammer
+            jam_power_mean = self.vars['jammer_power'].get()
+            jam_power_std = 2.0  # You could make this configurable
+            jam_freq = self.vars['jammer_freq'].get()
+            jam_x_dist = stats.uniform(loc=self.vars['jam_x'].get() - 100, scale=200)
+            jam_y_dist = stats.norm(loc=self.vars['jam_y'].get(), scale=50)
+            jam_z_dist = stats.norm(loc=self.vars['jam_z'].get(), scale=20)
+
+            # Run MC simulation
+            result = self.controller.run_monte_carlo(
+                tx_power, tx_freq, tx_pos,
+                rx_sens, rx_pos,
+                jam_power_mean, jam_power_std,
+                jam_freq, jam_x_dist, jam_y_dist, jam_z_dist,
+                N=1000
+            )
+
+            # Plot histogram
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots()
+            ax.hist(result['js_array'], bins=50, alpha=0.75)
+            ax.set_title("Monte Carlo J/S Ratio Distribution")
+            ax.set_xlabel("J/S (dB)")
+            ax.set_ylabel("Frequency")
+            ax.grid(True)
+
+            # Display in popup
+            top = tk.Toplevel(self)
+            top.title("Monte Carlo Results")
+            canvas = FigureCanvasTkAgg(fig, master=top)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+            # Show some summary stats
+            self.result_label.config(text=(
+                f"Monte Carlo Simulation Complete\n"
+                f"Mean J/S: {result['mean_js']:.2f} dB\n"
+                f"50th percentile: {result['percentile_50']:.2f} dB\n"
+                f"90th percentile: {result['percentile_90']:.2f} dB"
+            ))
+
+        except Exception as e:
+            self.result_label.config(text=f"Monte Carlo Error: {e}")
+    
     def plot_geometry(self):
         try:
             tx = self.controller.create_radio_source(

@@ -4,6 +4,9 @@ from model import (
     is_communication_successful
 )
 
+from model import MonteCarloModel, Position
+from scipy import stats
+import numpy as np
 
 class SimulationController:
     def __init__(self):
@@ -46,3 +49,39 @@ class SimulationController:
         tx_recv = received_power_dbm(tx, rx.position)
         jam_recv = received_power_dbm(jammer, rx.position)
         return tx_recv, jam_recv
+
+    def run_monte_carlo(self, tx_power, tx_freq, tx_pos,
+                        rx_sens, rx_pos,
+                        jam_power_mean, jam_power_std,
+                        jam_freq, jam_pos_x_dist, jam_pos_y_dist, jam_pos_z_dist,
+                        N):
+        tx_params = {
+            'power_dbm': tx_power,
+            'freq_mhz': tx_freq,
+            'pos': Position(*tx_pos)
+        }
+
+        rx_params = {
+            'sensitivity_dbm': rx_sens,
+            'pos': Position(*rx_pos)
+        }
+
+        jammer_params_dist = {
+            'power_dbm': stats.norm(loc=jam_power_mean, scale=jam_power_std),
+            'pos_x': jam_pos_x_dist,
+            'pos_y': jam_pos_y_dist,
+            'pos_z': jam_pos_z_dist,
+            'freq_mhz': jam_freq
+        }
+
+        model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)
+        js_array = model.run_simulation()
+
+        return {
+            'js_array': js_array,
+            'mean_js': np.mean(js_array),
+            'percentile_90': np.percentile(js_array, 90),
+            'percentile_50': np.percentile(js_array, 50)
+        }
+
+
