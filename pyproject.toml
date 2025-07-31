@@ -3,21 +3,41 @@ name = "jars"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "Rich Wood",email = "richard.wood@morsheadconsulting.co.uk"}
+    { name = "Rich Wood", email = "richard.wood@morsheadconsulting.co.uk" },
 ]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "matplotlib (>=3.10.3,<4.0.0)",
     "numpy (>=2.3.1,<3.0.0)",
-    "scipy (>=1.16.0,<2.0.0)"
+    "scipy (>=1.16.0,<2.0.0)",
 ]
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
 
 [tool.poetry.group.dev.dependencies]
 pip-audit = "^2.9.0"
+ruff = "^0.12.7"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88 # or 100 or 120, depending on your preference
+indent-width = 4
+
+# Enable rules for flake8 (E,F), isort (I), and Ruff formatting (RUF)
+select = ["E", "F", "I", "UP", "RUF"]
+
+# Optionally, disable some checks (example: allow unused variables starting with `_`)
+ignore = ["F841"]
+
+# Optionally, auto-fix on CLI
+fix = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false

@@ -1,8 +1,19 @@
-import pytest
 from math import inf
-from JARS.model import Position, RadioSource, Receiver, fspl_db, received_power_dbm, j_s_ratio_db, is_communication_successful, is_jamming_successful, MonteCarloModel
-from scipy import stats # Needed for MonteCarloModel tests
+
 import numpy as np
+from scipy import stats  # Needed for MonteCarloModel tests
+
+from JARS.model import (
+    MonteCarloModel,
+    Position,
+    RadioSource,
+    Receiver,
+    fspl_db,
+    is_communication_successful,
+    is_jamming_successful,
+    j_s_ratio_db,
+    received_power_dbm,
+)
 
 
 # Test cases for the Position class
