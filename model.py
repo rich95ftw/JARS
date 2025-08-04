@@ -1,7 +1,7 @@
-# model.py
+from __future__ import annotations
 
 from math import log10, sqrt
-from typing import Any, dict
+from typing import Any
 
 import numpy as np
 
@@ -23,7 +23,7 @@ class Position:
         self.y: float = float(y)
         self.z: float = float(z)
 
-    def distance_to(self, other: "Position") -> float:
+    def distance_to(self, other: Position) -> float:
         """
         Calculates the Euclidean distance to another Position object.
 
