@@ -14,14 +14,17 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pip-audit>=2.9.0", "ruff>=0.12.7"]
+dev = ["pip-audit>=2.9.0", "ruff>=0.12.7", "pytest>=8.0.0"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["src/jars"]
+
+[project.scripts]
+jars = "jars.view:main"
 
 [tool.ruff]
 line-length = 88

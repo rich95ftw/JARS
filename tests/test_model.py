@@ -3,7 +3,7 @@ from math import inf
 import numpy as np
 from scipy import stats  # Needed for MonteCarloModel tests
 
-from JARS.model import (
+from jars.model import (
     MonteCarloModel,
     Position,
     RadioSource,
@@ -74,7 +74,7 @@ def test_received_power_dbm():
     # Manually calculate expected FSPL for 1km, 100MHz
     expected_fspl = 20 * np.log10(1) + 20 * np.log10(100) + 32.44
     expected_received_power = 30 - expected_fspl
-    
+
     assert abs(received_power_dbm(tx, rx_pos) - expected_received_power) < 1e-9
 
 def test_received_power_dbm_same_position():

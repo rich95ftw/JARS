@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import stats
 
-from model import (
+from jars.model import (
     MonteCarloModel,
     Position,
     RadioSource,

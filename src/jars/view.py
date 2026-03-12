@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy import stats
 
-from controller import SimulationController
+from jars.controller import SimulationController
 
 
 class JarsGUI(tk.Tk):
@@ -330,6 +330,10 @@ class JarsGUI(tk.Tk):
             self.result_label.config(text=f"Plot error: {e}")
 
 
-if __name__ == "__main__":
+def main():
     app = JarsGUI()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()
