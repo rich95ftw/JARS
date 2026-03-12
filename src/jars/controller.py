@@ -7,6 +7,8 @@ from jars.model import (
     RadioSource,
     Receiver,
     is_communication_successful,
+    is_jamming_successful,
+    j_s_ratio_db,
     received_power_dbm,
 )
 
@@ -78,9 +80,11 @@ class SimulationController:
                 - "communication_success" (bool): True if communication is
                                                   successful, False otherwise.
         """
+        frequency_mismatch: bool = jammer.frequency_mhz != tx.frequency_mhz
+
         tx_to_rx_power_dbm: float = received_power_dbm(tx, rx.position)
         jam_to_rx_power_dbm: float = received_power_dbm(jammer, rx.position)
-        j_s_db: float = jam_to_rx_power_dbm - tx_to_rx_power_dbm
+        j_s_db: float = j_s_ratio_db(jammer, tx, rx)
 
         communication_success: bool = is_communication_successful(
             signal_dbm=tx_to_rx_power_dbm,
@@ -89,44 +93,34 @@ class SimulationController:
             j_s_threshold_db=j_s_threshold_db
         )
 
-        # Jamming success implies communication is possible
-        # (tx_to_rx_power_dbm >= rx.sensitivity_dbm) AND the jamming is
-        # effective (j_s_db > j_s_threshold_db).
-        jamming_success: bool = (tx_to_rx_power_dbm >= rx.sensitivity_dbm) and \
-                                (j_s_db > j_s_threshold_db)
+        jamming_success: bool = is_jamming_successful(
+            j_s_db=j_s_db,
+            j_s_threshold_db=j_s_threshold_db,
+            signal_dbm=tx_to_rx_power_dbm,
+            sensitivity_dbm=rx.sensitivity_dbm,
+        )
 
         print(f"Tx → Rx Power: {tx_to_rx_power_dbm:.2f} dBm")
         print(f"Jam → Rx Power: {jam_to_rx_power_dbm:.2f} dBm")
         print(f"J/S Ratio: {j_s_db:.2f} dB")
         print(f"Rx Sensitivity: {rx.sensitivity_dbm:.2f} dBm")
         print(f"Communication Success: {communication_success}")
+        print(f"Jamming Success: {jamming_success}")
+        if frequency_mismatch:
+            print(
+                f"WARNING: Jammer frequency ({jammer.frequency_mhz} MHz) does "
+                f"not match TX frequency ({tx.frequency_mhz} MHz). "
+                f"J/S result may not be physically valid for spot jamming."
+            )
 
         return {
             "j_s_db": j_s_db,
             "tx_recv_dbm": tx_to_rx_power_dbm,
             "jam_recv_dbm": jam_to_rx_power_dbm,
-            "communication_success": communication_success
+            "communication_success": communication_success,
+            "jamming_success": jamming_success,
+            "frequency_mismatch": frequency_mismatch,
         }
-
-    def get_received_powers(self, tx: RadioSource, jammer: RadioSource,
-                            rx: Receiver) -> tuple[float, float]:
-        """
-        Calculates the received power from the transmitter and the jammer at
-        the receiver.
-
-        Args:
-            tx (RadioSource): The transmitting radio source.
-            jammer (RadioSource): The jamming radio source.
-            rx (Receiver): The receiving radio.
-
-        Returns:
-            tuple[float, float]: A tuple containing:
-                - The received power from the transmitter in dBm.
-                - The received power from the jammer in dBm.
-        """
-        tx_recv: float = received_power_dbm(tx, rx.position)
-        jam_recv: float = received_power_dbm(jammer, rx.position)
-        return tx_recv, jam_recv
 
     def run_monte_carlo(self, tx_power: float, tx_freq: float,
                         tx_pos: tuple[float, float, float],
@@ -135,6 +129,7 @@ class SimulationController:
                         jam_freq: float, jam_pos_x_dist: stats.rv_continuous,
                         jam_pos_y_dist: stats.rv_continuous,
                         jam_pos_z_dist: stats.rv_continuous,
+                        j_s_threshold_db: float,
                         N: int) -> dict:
         """
         Runs a Monte Carlo simulation to analyze the J/S ratio distribution.
@@ -160,6 +155,8 @@ class SimulationController:
             jam_pos_z_dist (stats.rv_continuous): SciPy statistical
                                                   distribution for jammer's
                                                   Z position.
+            j_s_threshold_db (float): The J/S ratio threshold in dB for
+                                      successful communication.
             N (int): Number of Monte Carlo iterations.
 
         Returns:
@@ -170,6 +167,12 @@ class SimulationController:
                 - "percentile_90" (float): 90th percentile of J/S ratio.
                 - "percentile_50" (float): 50th percentile (median) of J/S
                                            ratio.
+                - "tx_recv_dbm" (float): Received signal power at the receiver
+                                         (constant across runs).
+                - "p_jamming_success" (float): Fraction of runs in which
+                                               jamming succeeded.
+                - "p_comm_success" (float): Fraction of runs in which
+                                            communication succeeded.
         """
         tx_params: dict = {
             'power_dbm': tx_power,
@@ -193,9 +196,28 @@ class SimulationController:
         model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)
         js_array: np.ndarray = model.run_simulation()
 
+        frequency_mismatch: bool = jam_freq != tx_freq
+
+        # TX is deterministic, so signal power at RX is constant across runs.
+        tx_source = RadioSource(power_dbm=tx_power, frequency_mhz=tx_freq,
+                                position=Position(*tx_pos))
+        tx_recv_dbm: float = received_power_dbm(tx_source, Position(*rx_pos))
+
+        signal_receivable: bool = tx_recv_dbm >= rx_sens
+        if signal_receivable:
+            p_jamming_success = float(np.mean(js_array > j_s_threshold_db))
+            p_comm_success = float(np.mean(js_array <= j_s_threshold_db))
+        else:
+            p_jamming_success = 0.0
+            p_comm_success = 0.0
+
         return {
             'js_array': js_array,
-            'mean_js': np.mean(js_array),
-            'percentile_90': np.percentile(js_array, 90),
-            'percentile_50': np.percentile(js_array, 50)
+            'mean_js': float(np.mean(js_array)),
+            'percentile_90': float(np.percentile(js_array, 90)),
+            'percentile_50': float(np.percentile(js_array, 50)),
+            'tx_recv_dbm': tx_recv_dbm,
+            'p_jamming_success': p_jamming_success,
+            'p_comm_success': p_comm_success,
+            'frequency_mismatch': frequency_mismatch,
         }

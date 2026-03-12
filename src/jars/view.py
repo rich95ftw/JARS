@@ -166,12 +166,23 @@ class JarsGUI(tk.Tk):
             results = self.controller.run_simulation(tx, jammer, rx, threshold)
             j_s = results["j_s_db"]
             comm_success = results["communication_success"]
+            jam_success = results["jamming_success"]
 
             result_text = f"J/S ratio: {j_s:.2f} dB\n"
             if comm_success:
                 result_text += "Communication is likely SUCCESSFUL."
+            elif jam_success:
+                result_text += "Communication is likely BLOCKED (jammed)."
             else:
-                result_text += "Communication is likely BLOCKED."
+                result_text += "Communication is likely BLOCKED (signal too weak)."
+
+            if results["frequency_mismatch"]:
+                result_text += (
+                    f"\n\u26a0 WARNING: Jammer frequency "
+                    f"({jammer.frequency_mhz:.1f} MHz) \u2260 "
+                    f"TX frequency ({tx.frequency_mhz:.1f} MHz). "
+                    f"J/S result may not be valid for spot jamming."
+                )
 
             self.result_label.config(text=result_text)
         except Exception as e:
@@ -207,20 +218,25 @@ class JarsGUI(tk.Tk):
             jam_y_dist = stats.norm(loc=jam_y, scale=jam_y_std)
             jam_z_dist = stats.norm(loc=jam_z, scale=jam_z_std)
 
+            threshold = self.vars['threshold'].get()
             N = self.vars['mc_samples'].get()
             result = self.controller.run_monte_carlo(
                 tx_power, tx_freq, tx_pos,
                 rx_sens, rx_pos,
                 jam_power_mean, jam_power_std,
                 jam_freq, jam_x_dist, jam_y_dist, jam_z_dist,
+                j_s_threshold_db=threshold,
                 N=N
             )
 
             fig, ax = plt.subplots()
             ax.hist(result['js_array'], bins=50, alpha=0.75)
+            ax.axvline(threshold, color='red', linestyle='--',
+                       label=f'J/S Threshold ({threshold:.1f} dB)')
             ax.set_title("Monte Carlo J/S Ratio Distribution")
             ax.set_xlabel("J/S (dB)")
             ax.set_ylabel("Frequency")
+            ax.legend()
             ax.grid(True)
 
             top = tk.Toplevel(self)
@@ -229,12 +245,22 @@ class JarsGUI(tk.Tk):
             canvas.draw()
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-            self.result_label.config(text=(
+            mc_text = (
                 f"Monte Carlo Simulation Complete\n"
-                f"Mean J/S: {result['mean_js']:.2f} dB\n"
-                f"50th percentile: {result['percentile_50']:.2f} dB\n"
-                f"90th percentile: {result['percentile_90']:.2f} dB"
-            ))
+                f"Tx signal at Rx: {result['tx_recv_dbm']:.2f} dBm\n"
+                f"Mean J/S: {result['mean_js']:.2f} dB  |  "
+                f"50th pct: {result['percentile_50']:.2f} dB  |  "
+                f"90th pct: {result['percentile_90']:.2f} dB\n"
+                f"P(jamming success): {result['p_jamming_success']:.1%}  |  "
+                f"P(comm success): {result['p_comm_success']:.1%}"
+            )
+            if result['frequency_mismatch']:
+                mc_text += (
+                    f"\n\u26a0 WARNING: Jammer frequency ({jam_freq:.1f} MHz)"
+                    f" \u2260 TX frequency ({tx_freq:.1f} MHz). "
+                    f"J/S result may not be valid for spot jamming."
+                )
+            self.result_label.config(text=mc_text)
 
         except Exception as e:
             self.result_label.config(text=f"Monte Carlo Error: {e}")
@@ -286,6 +312,7 @@ class JarsGUI(tk.Tk):
             jam_recv = results["jam_recv_dbm"]
             j_s = results["j_s_db"]
             comm_success = results["communication_success"]
+            jam_success = results["jamming_success"]
 
             tx_dist = tx_pos.distance_to(rx_pos)
             jam_dist = jam_pos.distance_to(rx_pos)
@@ -305,9 +332,15 @@ class JarsGUI(tk.Tk):
                     verticalalignment='top',
                     bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
-            status_text = "Communication success" if comm_success else \
-                          "Communication blocked"
-            status_color = 'lightgreen' if comm_success else '#ffcccb'
+            if comm_success:
+                status_text = "Communication success"
+                status_color = 'lightgreen'
+            elif jam_success:
+                status_text = "Communication blocked (jammed)"
+                status_color = '#ffcccb'
+            else:
+                status_text = "Communication blocked (signal too weak)"
+                status_color = '#ffcccb'
 
             ax.text(0.05, 0.87, status_text,
                     transform=ax.transAxes, fontsize=8, fontweight='bold',
