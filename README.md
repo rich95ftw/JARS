@@ -15,19 +15,21 @@ mvc/
 
 ### Prerequisites
 
-* Python 3.8+
-* Required packages - see pyproject.toml
+* Python 3.12+
+* [uv](https://docs.astral.sh/uv/) package manager
 
-```bash
-pip install matplotlib
-```
-
-### Running the Application
+### Install dependencies
 
 From the root of the project:
 
 ```bash
-python mvc/view.py
+uv sync
+```
+
+### Running the Application
+
+```bash
+uv run jars
 ```
 
 ## 🧼 Features
