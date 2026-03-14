@@ -25,6 +25,7 @@ class JarsGUI(tk.Tk):
         """Initializes all Tkinter variables used for user inputs."""
         return {
             'tx_power': tk.DoubleVar(value=30.0),
+            'tx_antenna_gain': tk.DoubleVar(value=0.0),
             'tx_freq': tk.DoubleVar(value=300.0),
             'tx_x': tk.DoubleVar(value=0.0),
             'tx_y': tk.DoubleVar(value=0.0),
@@ -37,14 +38,22 @@ class JarsGUI(tk.Tk):
             'jam_z': tk.DoubleVar(value=0.0),
 
             'jammer_power_std': tk.DoubleVar(value=2.0),
+            'jammer_power_min': tk.DoubleVar(value=30.0),
+            'jammer_power_max': tk.DoubleVar(value=50.0),
+            'jammer_antenna_gain': tk.DoubleVar(value=0.0),
             'jammer_x_std': tk.DoubleVar(value=100.0),
             'jammer_y_std': tk.DoubleVar(value=50.0),
             'jammer_z_std': tk.DoubleVar(value=20.0),
+            'jammer_pos_dist': tk.StringVar(value="Normal"),
 
             'rx_sens': tk.DoubleVar(value=-90.0),
+            'rx_antenna_gain': tk.DoubleVar(value=0.0),
             'rx_x': tk.DoubleVar(value=2000.0),
+            'rx_x_std': tk.DoubleVar(value=0.0),
             'rx_y': tk.DoubleVar(value=0.0),
+            'rx_y_std': tk.DoubleVar(value=0.0),
             'rx_z': tk.DoubleVar(value=0.0),
+            'rx_z_std': tk.DoubleVar(value=0.0),
 
             'threshold': tk.DoubleVar(value=10.0),
             'mc_samples': tk.IntVar(value=1000)
@@ -63,31 +72,69 @@ class JarsGUI(tk.Tk):
         """Adds all input sections to the main input frame."""
         self._add_input_section(parent_frame, "Transmitter", [
             ("Power (dBm)", 'tx_power'),
+            ("Antenna Gain (dBi)", 'tx_antenna_gain'),
             ("Frequency (MHz)", 'tx_freq'),
             ("Position X (m)", 'tx_x'),
             ("Position Y (m)", 'tx_y'),
             ("Position Z (m)", 'tx_z'),
         ], column=0)
 
-        self._add_input_section(parent_frame, "Jammer", [
-            ("Power (dBm)", 'jammer_power'),
-            ("Power Std (dB)", 'jammer_power_std'),
-            ("Frequency (MHz)", 'jammer_freq'),
-            ("Position X (m)", 'jam_x'),
-            ("X Std (m)", 'jammer_x_std'),
-            ("Position Y (m)", 'jam_y'),
-            ("Y Std (m)", 'jammer_y_std'),
-            ("Position Z (m)", 'jam_z'),
-            ("Z Std (m)", 'jammer_z_std'),
-        ], column=1)
+        self._create_jammer_section(parent_frame, column=1)
 
         self._add_input_section(parent_frame, "Receiver & Threshold", [
             ("Sensitivity (dBm)", 'rx_sens'),
+            ("Antenna Gain (dBi)", 'rx_antenna_gain'),
             ("Position X (m)", 'rx_x'),
+            ("X Std (m)", 'rx_x_std'),
             ("Position Y (m)", 'rx_y'),
+            ("Y Std (m)", 'rx_y_std'),
             ("Position Z (m)", 'rx_z'),
+            ("Z Std (m)", 'rx_z_std'),
             ("J/S Threshold (dB)", 'threshold'),
         ], column=2)
+
+    def _create_jammer_section(self, parent: ttk.Frame, column: int):
+        """
+        Creates the Jammer input section with a position distribution selector.
+        """
+        frame = ttk.LabelFrame(parent, text="Jammer")
+        frame.grid(row=0, column=column, padx=10, pady=5, sticky=(tk.W, tk.E))
+
+        for i, (label_text, var_name) in enumerate([
+            ("Power (dBm)", 'jammer_power'),
+            ("Power Std (dB)", 'jammer_power_std'),
+            ("Power Min (dBm)", 'jammer_power_min'),
+            ("Power Max (dBm)", 'jammer_power_max'),
+            ("Antenna Gain (dBi)", 'jammer_antenna_gain'),
+            ("Frequency (MHz)", 'jammer_freq'),
+        ]):
+            ttk.Label(frame, text=label_text).grid(
+                row=i, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Entry(frame, textvariable=self.vars[var_name], width=10).grid(
+                row=i, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+        ttk.Label(frame, text="Pos. Distribution").grid(
+            row=6, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Combobox(
+            frame,
+            textvariable=self.vars['jammer_pos_dist'],
+            values=["Normal", "Uniform"],
+            state="readonly",
+            width=8,
+        ).grid(row=6, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+        for i, (label_text, var_name) in enumerate([
+            ("Position X (m)", 'jam_x'),
+            ("X Spread (m)", 'jammer_x_std'),
+            ("Position Y (m)", 'jam_y'),
+            ("Y Spread (m)", 'jammer_y_std'),
+            ("Position Z (m)", 'jam_z'),
+            ("Z Spread (m)", 'jammer_z_std'),
+        ], start=7):
+            ttk.Label(frame, text=label_text).grid(
+                row=i, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Entry(frame, textvariable=self.vars[var_name], width=10).grid(
+                row=i, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
 
     def _create_button_frame(self):
         """Creates the frame containing all control buttons."""
@@ -114,7 +161,7 @@ class JarsGUI(tk.Tk):
         """Creates the label for displaying simulation results."""
         self.result_label = ttk.Label(
             self,
-            text="Press 'Run Simulation' to see results.",
+            text="Press 'Run' to see results.",
             padding="10",
             font=("", 10, "bold")
         )
@@ -146,20 +193,23 @@ class JarsGUI(tk.Tk):
                 self.vars['tx_freq'].get(),
                 self.vars['tx_x'].get(),
                 self.vars['tx_y'].get(),
-                self.vars['tx_z'].get()
+                self.vars['tx_z'].get(),
+                antenna_gain_dbi=self.vars['tx_antenna_gain'].get(),
             )
             jammer = self.controller.create_radio_source(
                 self.vars['jammer_power'].get(),
                 self.vars['jammer_freq'].get(),
                 self.vars['jam_x'].get(),
                 self.vars['jam_y'].get(),
-                self.vars['jam_z'].get()
+                self.vars['jam_z'].get(),
+                antenna_gain_dbi=self.vars['jammer_antenna_gain'].get(),
             )
             rx = self.controller.create_receiver(
                 self.vars['rx_sens'].get(),
                 self.vars['rx_x'].get(),
                 self.vars['rx_y'].get(),
-                self.vars['rx_z'].get()
+                self.vars['rx_z'].get(),
+                antenna_gain_dbi=self.vars['rx_antenna_gain'].get(),
             )
             threshold = self.vars['threshold'].get()
 
@@ -202,9 +252,19 @@ class JarsGUI(tk.Tk):
             rx_sens = self.vars['rx_sens'].get()
             rx_pos = (self.vars['rx_x'].get(), self.vars['rx_y'].get(),
                       self.vars['rx_z'].get())
+            rx_x_std = self.vars['rx_x_std'].get()
+            rx_y_std = self.vars['rx_y_std'].get()
+            rx_z_std = self.vars['rx_z_std'].get()
 
             jam_power_mean = self.vars['jammer_power'].get()
             jam_power_std = self.vars['jammer_power_std'].get()
+            jam_power_min = self.vars['jammer_power_min'].get()
+            jam_power_max = self.vars['jammer_power_max'].get()
+            if jam_power_min >= jam_power_max:
+                raise ValueError(
+                    f"Power Min ({jam_power_min} dBm) must be less than "
+                    f"Power Max ({jam_power_max} dBm)."
+                )
             jam_freq = self.vars['jammer_freq'].get()
 
             jam_x = self.vars['jam_x'].get()
@@ -214,9 +274,19 @@ class JarsGUI(tk.Tk):
             jam_z = self.vars['jam_z'].get()
             jam_z_std = self.vars['jammer_z_std'].get()
 
-            jam_x_dist = stats.norm(loc=jam_x, scale=jam_x_std)
-            jam_y_dist = stats.norm(loc=jam_y, scale=jam_y_std)
-            jam_z_dist = stats.norm(loc=jam_z, scale=jam_z_std)
+            dist_type = self.vars['jammer_pos_dist'].get()
+
+            def _make_pos_dist(centre, spread):
+                if spread <= 0.0:
+                    return stats.norm(loc=centre, scale=1e-6)
+                if dist_type == "Uniform":
+                    return stats.uniform(loc=centre - spread,
+                                        scale=2 * spread)
+                return stats.norm(loc=centre, scale=spread)
+
+            jam_x_dist = _make_pos_dist(jam_x, jam_x_std)
+            jam_y_dist = _make_pos_dist(jam_y, jam_y_std)
+            jam_z_dist = _make_pos_dist(jam_z, jam_z_std)
 
             threshold = self.vars['threshold'].get()
             N = self.vars['mc_samples'].get()
@@ -226,16 +296,28 @@ class JarsGUI(tk.Tk):
                 jam_power_mean, jam_power_std,
                 jam_freq, jam_x_dist, jam_y_dist, jam_z_dist,
                 j_s_threshold_db=threshold,
-                N=N
+                N=N,
+                rx_x_std=rx_x_std,
+                rx_y_std=rx_y_std,
+                rx_z_std=rx_z_std,
+                jam_power_min=jam_power_min,
+                jam_power_max=jam_power_max,
+                tx_antenna_gain_dbi=self.vars['tx_antenna_gain'].get(),
+                jammer_antenna_gain_dbi=self.vars['jammer_antenna_gain'].get(),
+                rx_antenna_gain_dbi=self.vars['rx_antenna_gain'].get(),
             )
 
             fig, ax = plt.subplots()
-            ax.hist(result['js_array'], bins=50, alpha=0.75)
+            ax.hist(result['js_array'], bins=min(50, max(10, N // 10)),
+                    alpha=0.75)
             ax.axvline(threshold, color='red', linestyle='--',
                        label=f'J/S Threshold ({threshold:.1f} dB)')
-            ax.set_title("Monte Carlo J/S Ratio Distribution")
+            ax.set_title(
+                f"Monte Carlo J/S Ratio Distribution"
+                f"\nJammer position: {dist_type}"
+            )
             ax.set_xlabel("J/S (dB)")
-            ax.set_ylabel("Frequency")
+            ax.set_ylabel("Count")
             ax.legend()
             ax.grid(True)
 
@@ -245,9 +327,14 @@ class JarsGUI(tk.Tk):
             canvas.draw()
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+            tx_recv_label = (
+                "Mean Tx signal at Rx" if result['rx_position_uncertain']
+                else "Tx signal at Rx"
+            )
             mc_text = (
-                f"Monte Carlo Simulation Complete\n"
-                f"Tx signal at Rx: {result['tx_recv_dbm']:.2f} dBm\n"
+                f"Monte Carlo Simulation Complete"
+                f"  |  Jammer position: {dist_type}\n"
+                f"{tx_recv_label}: {result['tx_recv_dbm']:.2f} dBm\n"
                 f"Mean J/S: {result['mean_js']:.2f} dB  |  "
                 f"50th pct: {result['percentile_50']:.2f} dB  |  "
                 f"90th pct: {result['percentile_90']:.2f} dB\n"
@@ -273,18 +360,21 @@ class JarsGUI(tk.Tk):
             tx = self.controller.create_radio_source(
                 self.vars['tx_power'].get(), self.vars['tx_freq'].get(),
                 self.vars['tx_x'].get(), self.vars['tx_y'].get(),
-                self.vars['tx_z'].get()
+                self.vars['tx_z'].get(),
+                antenna_gain_dbi=self.vars['tx_antenna_gain'].get(),
             )
             jammer = self.controller.create_radio_source(
                 self.vars['jammer_power'].get(),
                 self.vars['jammer_freq'].get(),
                 self.vars['jam_x'].get(), self.vars['jam_y'].get(),
-                self.vars['jam_z'].get()
+                self.vars['jam_z'].get(),
+                antenna_gain_dbi=self.vars['jammer_antenna_gain'].get(),
             )
             rx = self.controller.create_receiver(
                 self.vars['rx_sens'].get(),
                 self.vars['rx_x'].get(), self.vars['rx_y'].get(),
-                self.vars['rx_z'].get()
+                self.vars['rx_z'].get(),
+                antenna_gain_dbi=self.vars['rx_antenna_gain'].get(),
             )
             threshold = self.vars['threshold'].get()
 
