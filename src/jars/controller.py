@@ -25,7 +25,8 @@ class SimulationController:
         pass
 
     def create_radio_source(self, power: float, freq: float, x: float,
-                            y: float, z: float) -> RadioSource:
+                            y: float, z: float,
+                            antenna_gain_dbi: float = 0.0) -> RadioSource:
         """
         Creates a RadioSource object.
 
@@ -35,15 +36,17 @@ class SimulationController:
             x (float): X-coordinate of the source's position.
             y (float): Y-coordinate of the source's position.
             z (float): Z-coordinate of the source's position.
+            antenna_gain_dbi (float): Antenna gain in dBi. Default 0.
 
         Returns:
             RadioSource: A new RadioSource instance.
         """
         return RadioSource(power_dbm=power, frequency_mhz=freq,
-                           position=Position(x, y, z))
+                           position=Position(x, y, z),
+                           antenna_gain_dbi=antenna_gain_dbi)
 
     def create_receiver(self, sens: float, x: float, y: float,
-                        z: float) -> Receiver:
+                        z: float, antenna_gain_dbi: float = 0.0) -> Receiver:
         """
         Creates a Receiver object.
 
@@ -52,11 +55,13 @@ class SimulationController:
             x (float): X-coordinate of the receiver's position.
             y (float): Y-coordinate of the receiver's position.
             z (float): Z-coordinate of the receiver's position.
+            antenna_gain_dbi (float): Antenna gain in dBi. Default 0.
 
         Returns:
             Receiver: A new Receiver instance.
         """
-        return Receiver(sensitivity_dbm=sens, position=Position(x, y, z))
+        return Receiver(sensitivity_dbm=sens, position=Position(x, y, z),
+                        antenna_gain_dbi=antenna_gain_dbi)
 
     def run_simulation(self, tx: RadioSource, jammer: RadioSource,
                        rx: Receiver, j_s_threshold_db: float) -> dict:
@@ -82,8 +87,10 @@ class SimulationController:
         """
         frequency_mismatch: bool = jammer.frequency_mhz != tx.frequency_mhz
 
-        tx_to_rx_power_dbm: float = received_power_dbm(tx, rx.position)
-        jam_to_rx_power_dbm: float = received_power_dbm(jammer, rx.position)
+        tx_to_rx_power_dbm: float = received_power_dbm(tx, rx.position,
+                                                        rx.antenna_gain_dbi)
+        jam_to_rx_power_dbm: float = received_power_dbm(jammer, rx.position,
+                                                         rx.antenna_gain_dbi)
         j_s_db: float = j_s_ratio_db(jammer, tx, rx)
 
         communication_success: bool = is_communication_successful(
@@ -133,7 +140,12 @@ class SimulationController:
                         N: int,
                         rx_x_std: float = 0.0,
                         rx_y_std: float = 0.0,
-                        rx_z_std: float = 0.0) -> dict:
+                        rx_z_std: float = 0.0,
+                        jam_power_min: float = -np.inf,
+                        jam_power_max: float = np.inf,
+                        tx_antenna_gain_dbi: float = 0.0,
+                        jammer_antenna_gain_dbi: float = 0.0,
+                        rx_antenna_gain_dbi: float = 0.0) -> dict:
         """
         Runs a Monte Carlo simulation to analyze the J/S ratio distribution.
 
@@ -167,6 +179,10 @@ class SimulationController:
                                Default 0 (deterministic).
             rx_z_std (float): Std deviation of receiver Z position (m).
                                Default 0 (deterministic).
+            jam_power_min (float): Lower bound for jammer power (dBm).
+                                   Default -inf (no lower truncation).
+            jam_power_max (float): Upper bound for jammer power (dBm).
+                                   Default +inf (no upper truncation).
 
         Returns:
             dict: A dictionary containing Monte Carlo simulation results:
@@ -193,22 +209,34 @@ class SimulationController:
         tx_params: dict = {
             'power_dbm': tx_power,
             'freq_mhz': tx_freq,
-            'pos': Position(*tx_pos)
+            'pos': Position(*tx_pos),
+            'antenna_gain_dbi': tx_antenna_gain_dbi,
         }
 
         rx_params: dict = {
             'sensitivity_dbm': rx_sens,
+            'antenna_gain_dbi': rx_antenna_gain_dbi,
             'pos_x': _pos_samples(rx_pos[0], rx_x_std),
             'pos_y': _pos_samples(rx_pos[1], rx_y_std),
             'pos_z': _pos_samples(rx_pos[2], rx_z_std),
         }
 
+        if jam_power_std <= 0.0:
+            power_dist = stats.norm(loc=jam_power_mean, scale=1e-6)
+        else:
+            a = (jam_power_min - jam_power_mean) / jam_power_std
+            b = (jam_power_max - jam_power_mean) / jam_power_std
+            power_dist = stats.truncnorm(
+                a=a, b=b, loc=jam_power_mean, scale=jam_power_std
+            )
+
         jammer_params_dist: dict = {
-            'power_dbm': stats.norm(loc=jam_power_mean, scale=jam_power_std),
+            'power_dbm': power_dist,
             'pos_x': jam_pos_x_dist,
             'pos_y': jam_pos_y_dist,
             'pos_z': jam_pos_z_dist,
-            'freq_mhz': jam_freq
+            'freq_mhz': jam_freq,
+            'antenna_gain_dbi': jammer_antenna_gain_dbi,
         }
 
         model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)

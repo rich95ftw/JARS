@@ -77,6 +77,40 @@ def test_received_power_dbm():
 
     assert abs(received_power_dbm(tx, rx_pos) - expected_received_power) < 1e-9
 
+def test_received_power_dbm_tx_antenna_gain():
+    """Tx antenna gain adds directly to received power."""
+    tx_pos = Position(0, 0, 0)
+    rx_pos = Position(1000, 0, 0)
+    tx_no_gain = RadioSource(power_dbm=30, frequency_mhz=100, position=tx_pos)
+    tx_with_gain = RadioSource(power_dbm=30, frequency_mhz=100,
+                               position=tx_pos, antenna_gain_dbi=10.0)
+    diff = received_power_dbm(tx_with_gain, rx_pos) - received_power_dbm(tx_no_gain, rx_pos)
+    assert abs(diff - 10.0) < 1e-9
+
+
+def test_received_power_dbm_rx_antenna_gain():
+    """Rx antenna gain adds directly to received power."""
+    tx_pos = Position(0, 0, 0)
+    rx_pos = Position(1000, 0, 0)
+    tx = RadioSource(power_dbm=30, frequency_mhz=100, position=tx_pos)
+    diff = (received_power_dbm(tx, rx_pos, rx_antenna_gain_dbi=6.0)
+            - received_power_dbm(tx, rx_pos))
+    assert abs(diff - 6.0) < 1e-9
+
+
+def test_j_s_ratio_rx_gain_cancels():
+    """Rx antenna gain affects both paths equally so J/S is unchanged."""
+    jammer = RadioSource(power_dbm=50, frequency_mhz=300,
+                         position=Position(500, 0, 0))
+    tx = RadioSource(power_dbm=30, frequency_mhz=300,
+                     position=Position(0, 0, 0))
+    rx_no_gain = Receiver(sensitivity_dbm=-90, position=Position(1000, 0, 0))
+    rx_with_gain = Receiver(sensitivity_dbm=-90, position=Position(1000, 0, 0),
+                            antenna_gain_dbi=12.0)
+    assert abs(j_s_ratio_db(jammer, tx, rx_no_gain)
+               - j_s_ratio_db(jammer, tx, rx_with_gain)) < 1e-9
+
+
 def test_received_power_dbm_same_position():
     tx_pos = Position(0, 0, 0)
     tx = RadioSource(power_dbm=30, frequency_mhz=100, position=tx_pos)

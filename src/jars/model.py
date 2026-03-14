@@ -45,7 +45,8 @@ class RadioSource:
 
     def __init__(self, power_dbm: float | int,
                  frequency_mhz: float | int,
-                 position: Position) -> None:
+                 position: Position,
+                 antenna_gain_dbi: float | int = 0.0) -> None:
         """
         Initializes a RadioSource.
 
@@ -53,26 +54,33 @@ class RadioSource:
             power_dbm (Union[float, int]): The transmit power in dBm.
             frequency_mhz (Union[float, int]): The frequency in MHz.
             position (Position): The position of the radio source.
+            antenna_gain_dbi (Union[float, int]): Antenna gain in dBi.
+                                                  Default 0 (isotropic).
         """
         self.power_dbm: float = float(power_dbm)
         self.frequency_mhz: float = float(frequency_mhz)
         self.position: Position = position
+        self.antenna_gain_dbi: float = float(antenna_gain_dbi)
 
 
 class Receiver:
     """Represents a radio receiver with a specific sensitivity and position."""
 
     def __init__(self, sensitivity_dbm: float | int,
-                 position: Position) -> None:
+                 position: Position,
+                 antenna_gain_dbi: float | int = 0.0) -> None:
         """
         Initializes a Receiver.
 
         Args:
             sensitivity_dbm (Union[float, int]): The receiver sensitivity in dBm.
             position (Position): The position of the receiver.
+            antenna_gain_dbi (Union[float, int]): Antenna gain in dBi.
+                                                  Default 0 (isotropic).
         """
         self.sensitivity_dbm: float = float(sensitivity_dbm)
         self.position: Position = position
+        self.antenna_gain_dbi: float = float(antenna_gain_dbi)
 
 
 def fspl_db(distance_km: float, frequency_mhz: float) -> float:
@@ -94,19 +102,27 @@ def fspl_db(distance_km: float, frequency_mhz: float) -> float:
     return (20 * log10(distance_km) + 20 * log10(frequency_mhz) + 32.44)
 
 
-def received_power_dbm(tx: RadioSource, rx_pos: Position) -> float:
+def received_power_dbm(tx: RadioSource, rx_pos: Position,
+                       rx_antenna_gain_dbi: float = 0.0) -> float:
     """
     Calculates the received power in dBm at a given position.
+
+    Accounts for transmitter and receiver antenna gains:
+        P_rx = P_tx + G_tx - FSPL + G_rx
 
     Args:
         tx (RadioSource): The transmitting radio source.
         rx_pos (Position): The position of the receiver.
+        rx_antenna_gain_dbi (float): Receiver antenna gain in dBi.
+                                     Default 0 (isotropic).
 
     Returns:
         float: The received power in dBm.
     """
     distance_km: float = tx.position.distance_to(rx_pos) / 1000.0
-    return tx.power_dbm - fspl_db(distance_km, tx.frequency_mhz)
+    return (tx.power_dbm + tx.antenna_gain_dbi
+            - fspl_db(distance_km, tx.frequency_mhz)
+            + rx_antenna_gain_dbi)
 
 
 def j_s_ratio_db(jammer: RadioSource, transmitter: RadioSource,
@@ -122,8 +138,10 @@ def j_s_ratio_db(jammer: RadioSource, transmitter: RadioSource,
     Returns:
         float: The J/S ratio in dB.
     """
-    j_recv: float = received_power_dbm(jammer, receiver.position)
-    s_recv: float = received_power_dbm(transmitter, receiver.position)
+    j_recv: float = received_power_dbm(jammer, receiver.position,
+                                       receiver.antenna_gain_dbi)
+    s_recv: float = received_power_dbm(transmitter, receiver.position,
+                                       receiver.antenna_gain_dbi)
     return j_recv - s_recv
 
 
@@ -210,11 +228,16 @@ class MonteCarloModel:
             power_dbm=tx_params["power_dbm"],
             frequency_mhz=tx_params["freq_mhz"],
             position=tx_params["pos"],
+            antenna_gain_dbi=tx_params.get("antenna_gain_dbi", 0.0),
         )
         self.rx_sensitivity: float = float(rx_params["sensitivity_dbm"])
+        self.rx_antenna_gain: float = float(rx_params.get("antenna_gain_dbi", 0.0))
         self.rx_x_samples: np.ndarray = rx_params["pos_x"]
         self.rx_y_samples: np.ndarray = rx_params["pos_y"]
         self.rx_z_samples: np.ndarray = rx_params["pos_z"]
+        self.jammer_antenna_gain: float = float(
+            jammer_params_dist.get("antenna_gain_dbi", 0.0)
+        )
         self.jam_power_samples: np.ndarray = (
             jammer_params_dist["power_dbm"].rvs(size=N)
         )
@@ -250,7 +273,8 @@ class MonteCarloModel:
             20 * np.log10(safe_jam_dist) + 20 * np.log10(self.jammer_freq) + 32.44,
             np.inf,
         )
-        jam_recv = self.jam_power_samples - jam_fspl
+        jam_recv = (self.jam_power_samples + self.jammer_antenna_gain
+                    - jam_fspl + self.rx_antenna_gain)
 
         # Tx -> Rx: Tx is fixed; Rx position varies per run
         tx_pos = self.transmitter.position
@@ -265,6 +289,7 @@ class MonteCarloModel:
             20 * np.log10(safe_tx_dist) + 20 * np.log10(self.transmitter.frequency_mhz) + 32.44,
             np.inf,
         )
-        tx_recv = self.transmitter.power_dbm - tx_fspl
+        tx_recv = (self.transmitter.power_dbm + self.transmitter.antenna_gain_dbi
+                   - tx_fspl + self.rx_antenna_gain)
 
         return jam_recv - tx_recv, tx_recv
