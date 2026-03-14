@@ -211,10 +211,10 @@ class MonteCarloModel:
             frequency_mhz=tx_params["freq_mhz"],
             position=tx_params["pos"],
         )
-        self.receiver: Receiver = Receiver(
-            sensitivity_dbm=rx_params["sensitivity_dbm"],
-            position=rx_params["pos"]
-        )
+        self.rx_sensitivity: float = float(rx_params["sensitivity_dbm"])
+        self.rx_x_samples: np.ndarray = rx_params["pos_x"]
+        self.rx_y_samples: np.ndarray = rx_params["pos_y"]
+        self.rx_z_samples: np.ndarray = rx_params["pos_z"]
         self.jam_power_samples: np.ndarray = (
             jammer_params_dist["power_dbm"].rvs(size=N)
         )
@@ -229,27 +229,42 @@ class MonteCarloModel:
         )
         self.jammer_freq: float = jammer_params_dist["freq_mhz"]
 
-    def run_simulation(self) -> np.ndarray:
+    def run_simulation(self) -> tuple[np.ndarray, np.ndarray]:
         """
         Runs the full Monte Carlo simulation.
 
         Returns:
-            np.ndarray: An array containing the J/S ratio result from each run.
+            tuple[np.ndarray, np.ndarray]: A tuple of (js_array, tx_recv_array),
+                each of length N. js_array contains the J/S ratio per run;
+                tx_recv_array contains the received Tx signal power per run.
         """
-        rx = self.receiver.position
-        distances_km = np.sqrt(
-            (self.jam_x_samples - rx.x) ** 2 +
-            (self.jam_y_samples - rx.y) ** 2 +
-            (self.jam_z_samples - rx.z) ** 2
+        # Jam -> Rx: both jammer and Rx positions vary per run
+        jam_distances_km = np.sqrt(
+            (self.jam_x_samples - self.rx_x_samples) ** 2 +
+            (self.jam_y_samples - self.rx_y_samples) ** 2 +
+            (self.jam_z_samples - self.rx_z_samples) ** 2
         ) / 1000.0
-
-        # Use safe_dist to avoid log10(0); those entries are overwritten by inf
-        safe_dist = np.where(distances_km > 0, distances_km, 1.0)
-        fspl = np.where(
-            distances_km > 0,
-            20 * np.log10(safe_dist) + 20 * np.log10(self.jammer_freq) + 32.44,
+        safe_jam_dist = np.where(jam_distances_km > 0, jam_distances_km, 1.0)
+        jam_fspl = np.where(
+            jam_distances_km > 0,
+            20 * np.log10(safe_jam_dist) + 20 * np.log10(self.jammer_freq) + 32.44,
             np.inf,
         )
-        jam_recv = self.jam_power_samples - fspl
-        tx_recv = received_power_dbm(self.transmitter, rx)
-        return jam_recv - tx_recv
+        jam_recv = self.jam_power_samples - jam_fspl
+
+        # Tx -> Rx: Tx is fixed; Rx position varies per run
+        tx_pos = self.transmitter.position
+        tx_distances_km = np.sqrt(
+            (tx_pos.x - self.rx_x_samples) ** 2 +
+            (tx_pos.y - self.rx_y_samples) ** 2 +
+            (tx_pos.z - self.rx_z_samples) ** 2
+        ) / 1000.0
+        safe_tx_dist = np.where(tx_distances_km > 0, tx_distances_km, 1.0)
+        tx_fspl = np.where(
+            tx_distances_km > 0,
+            20 * np.log10(safe_tx_dist) + 20 * np.log10(self.transmitter.frequency_mhz) + 32.44,
+            np.inf,
+        )
+        tx_recv = self.transmitter.power_dbm - tx_fspl
+
+        return jam_recv - tx_recv, tx_recv

@@ -130,7 +130,10 @@ class SimulationController:
                         jam_pos_y_dist: stats.rv_continuous,
                         jam_pos_z_dist: stats.rv_continuous,
                         j_s_threshold_db: float,
-                        N: int) -> dict:
+                        N: int,
+                        rx_x_std: float = 0.0,
+                        rx_y_std: float = 0.0,
+                        rx_z_std: float = 0.0) -> dict:
         """
         Runs a Monte Carlo simulation to analyze the J/S ratio distribution.
 
@@ -140,8 +143,8 @@ class SimulationController:
             tx_pos (tuple[float, float, float]): (x, y, z) coordinates of the
                                                  transmitter.
             rx_sens (float): Receiver sensitivity in dBm.
-            rx_pos (tuple[float, float, float]): (x, y, z) coordinates of the
-                                                 receiver.
+            rx_pos (tuple[float, float, float]): Nominal (x, y, z) coordinates
+                                                 of the receiver.
             jam_power_mean (float): Mean power of the jammer in dBm.
             jam_power_std (float): Standard deviation of the jammer's power
                                    in dBm.
@@ -158,6 +161,12 @@ class SimulationController:
             j_s_threshold_db (float): The J/S ratio threshold in dB for
                                       successful communication.
             N (int): Number of Monte Carlo iterations.
+            rx_x_std (float): Std deviation of receiver X position (m).
+                               Default 0 (deterministic).
+            rx_y_std (float): Std deviation of receiver Y position (m).
+                               Default 0 (deterministic).
+            rx_z_std (float): Std deviation of receiver Z position (m).
+                               Default 0 (deterministic).
 
         Returns:
             dict: A dictionary containing Monte Carlo simulation results:
@@ -167,13 +176,20 @@ class SimulationController:
                 - "percentile_90" (float): 90th percentile of J/S ratio.
                 - "percentile_50" (float): 50th percentile (median) of J/S
                                            ratio.
-                - "tx_recv_dbm" (float): Received signal power at the receiver
-                                         (constant across runs).
+                - "tx_recv_dbm" (float): Mean received signal power at the
+                                         receiver across all runs.
                 - "p_jamming_success" (float): Fraction of runs in which
                                                jamming succeeded.
                 - "p_comm_success" (float): Fraction of runs in which
                                             communication succeeded.
+                - "rx_position_uncertain" (bool): True if any Rx position
+                                                  std > 0.
         """
+        def _pos_samples(loc: float, scale: float) -> np.ndarray:
+            if scale == 0.0:
+                return np.full(N, loc)
+            return stats.norm(loc=loc, scale=scale).rvs(size=N)
+
         tx_params: dict = {
             'power_dbm': tx_power,
             'freq_mhz': tx_freq,
@@ -182,7 +198,9 @@ class SimulationController:
 
         rx_params: dict = {
             'sensitivity_dbm': rx_sens,
-            'pos': Position(*rx_pos)
+            'pos_x': _pos_samples(rx_pos[0], rx_x_std),
+            'pos_y': _pos_samples(rx_pos[1], rx_y_std),
+            'pos_z': _pos_samples(rx_pos[2], rx_z_std),
         }
 
         jammer_params_dist: dict = {
@@ -194,30 +212,25 @@ class SimulationController:
         }
 
         model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)
-        js_array: np.ndarray = model.run_simulation()
+        js_array, tx_recv_array = model.run_simulation()
 
         frequency_mismatch: bool = jam_freq != tx_freq
+        rx_position_uncertain: bool = any(s > 0.0 for s in
+                                          (rx_x_std, rx_y_std, rx_z_std))
 
-        # TX is deterministic, so signal power at RX is constant across runs.
-        tx_source = RadioSource(power_dbm=tx_power, frequency_mhz=tx_freq,
-                                position=Position(*tx_pos))
-        tx_recv_dbm: float = received_power_dbm(tx_source, Position(*rx_pos))
-
-        signal_receivable: bool = tx_recv_dbm >= rx_sens
-        if signal_receivable:
-            p_jamming_success = float(np.mean(js_array > j_s_threshold_db))
-            p_comm_success = float(np.mean(js_array <= j_s_threshold_db))
-        else:
-            p_jamming_success = 0.0
-            p_comm_success = 0.0
+        # Evaluate success per run: signal must be receivable AND J/S in range.
+        signal_receivable_array = tx_recv_array >= rx_sens
+        comm_success_array = signal_receivable_array & (js_array <= j_s_threshold_db)
+        jam_success_array = signal_receivable_array & (js_array > j_s_threshold_db)
 
         return {
             'js_array': js_array,
             'mean_js': float(np.mean(js_array)),
             'percentile_90': float(np.percentile(js_array, 90)),
             'percentile_50': float(np.percentile(js_array, 50)),
-            'tx_recv_dbm': tx_recv_dbm,
-            'p_jamming_success': p_jamming_success,
-            'p_comm_success': p_comm_success,
+            'tx_recv_dbm': float(np.mean(tx_recv_array)),
+            'p_jamming_success': float(np.mean(jam_success_array)),
+            'p_comm_success': float(np.mean(comm_success_array)),
             'frequency_mismatch': frequency_mismatch,
+            'rx_position_uncertain': rx_position_uncertain,
         }

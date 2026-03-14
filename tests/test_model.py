@@ -140,9 +140,20 @@ def test_is_jamming_successful():
     assert is_jamming_successful(j_s_db=10, j_s_threshold_db=10, signal_dbm=-70, sensitivity_dbm=-80) == False # Not strictly greater
 
 # Test cases for MonteCarloModel
+def _make_rx_params(N, x=2000, y=0, z=0, x_std=0, y_std=0, z_std=0):
+    def _samp(loc, scale):
+        if scale == 0:
+            return np.full(N, float(loc))
+        return stats.norm(loc=loc, scale=scale).rvs(size=N)
+    return {
+        'sensitivity_dbm': -90,
+        'pos_x': _samp(x, x_std),
+        'pos_y': _samp(y, y_std),
+        'pos_z': _samp(z, z_std),
+    }
+
 def test_monte_carlo_model_initialization():
     tx_params = {'power_dbm': 30, 'freq_mhz': 300, 'pos': Position(0,0,0)}
-    rx_params = {'sensitivity_dbm': -90, 'pos': Position(2000,0,0)}
     jammer_params_dist = {
         'power_dbm': stats.norm(loc=40, scale=2),
         'pos_x': stats.uniform(loc=900, scale=200),
@@ -151,21 +162,24 @@ def test_monte_carlo_model_initialization():
         'freq_mhz': 300
     }
     N = 100
+    rx_params = _make_rx_params(N)
 
     model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)
 
     assert model.N == N
     assert isinstance(model.transmitter, RadioSource)
-    assert isinstance(model.receiver, Receiver)
+    assert model.rx_sensitivity == -90.0
+    assert len(model.rx_x_samples) == N
+    assert len(model.rx_y_samples) == N
+    assert len(model.rx_z_samples) == N
     assert len(model.jam_power_samples) == N
     assert len(model.jam_x_samples) == N
     assert len(model.jam_y_samples) == N
     assert len(model.jam_z_samples) == N
-    assert model.jammer_freq == 300.0 # Check if deterministic freq is stored
+    assert model.jammer_freq == 300.0
 
 def test_monte_carlo_model_run_simulation():
     tx_params = {'power_dbm': 30, 'freq_mhz': 300, 'pos': Position(0,0,0)}
-    rx_params = {'sensitivity_dbm': -90, 'pos': Position(2000,0,0)}
     jammer_params_dist = {
         'power_dbm': stats.norm(loc=40, scale=2),
         'pos_x': stats.uniform(loc=900, scale=200),
@@ -173,17 +187,44 @@ def test_monte_carlo_model_run_simulation():
         'pos_z': stats.norm(loc=0, scale=20),
         'freq_mhz': 300
     }
-    N = 100 # A small number for quick test
+    N = 100
+    rx_params = _make_rx_params(N)
 
     model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)
-    results = model.run_simulation()
+    js_array, tx_recv_array = model.run_simulation()
 
-    assert isinstance(results, np.ndarray)
-    assert results.shape == (N,)
-    # You might add checks for the range of values, or if all are finite
-    assert np.all(np.isfinite(results))
+    assert isinstance(js_array, np.ndarray)
+    assert js_array.shape == (N,)
+    assert np.all(np.isfinite(js_array))
+    assert isinstance(tx_recv_array, np.ndarray)
+    assert tx_recv_array.shape == (N,)
+    assert np.all(np.isfinite(tx_recv_array))
 
-    # Test with N=1 to make sure the loop runs for single iteration correctly
-    model_single = MonteCarloModel(tx_params, rx_params, jammer_params_dist, 1)
-    results_single = model_single.run_simulation()
-    assert results_single.shape == (1,)
+def test_monte_carlo_model_run_simulation_with_rx_uncertainty():
+    tx_params = {'power_dbm': 30, 'freq_mhz': 300, 'pos': Position(0,0,0)}
+    jammer_params_dist = {
+        'power_dbm': stats.norm(loc=40, scale=2),
+        'pos_x': stats.uniform(loc=900, scale=200),
+        'pos_y': stats.norm(loc=500, scale=50),
+        'pos_z': stats.norm(loc=0, scale=20),
+        'freq_mhz': 300
+    }
+    N = 200
+    rx_params = _make_rx_params(N, x=2000, y=0, z=0, x_std=100, y_std=50)
+
+    model = MonteCarloModel(tx_params, rx_params, jammer_params_dist, N)
+    js_array, tx_recv_array = model.run_simulation()
+
+    assert js_array.shape == (N,)
+    assert tx_recv_array.shape == (N,)
+    # With Rx position uncertainty tx_recv_array should vary across runs
+    assert tx_recv_array.std() > 0
+    assert np.all(np.isfinite(js_array))
+    assert np.all(np.isfinite(tx_recv_array))
+
+    # Test with N=1
+    rx_params_single = _make_rx_params(1)
+    model_single = MonteCarloModel(tx_params, rx_params_single, jammer_params_dist, 1)
+    js_single, tx_single = model_single.run_simulation()
+    assert js_single.shape == (1,)
+    assert tx_single.shape == (1,)

@@ -40,11 +40,15 @@ class JarsGUI(tk.Tk):
             'jammer_x_std': tk.DoubleVar(value=100.0),
             'jammer_y_std': tk.DoubleVar(value=50.0),
             'jammer_z_std': tk.DoubleVar(value=20.0),
+            'jammer_pos_dist': tk.StringVar(value="Normal"),
 
             'rx_sens': tk.DoubleVar(value=-90.0),
             'rx_x': tk.DoubleVar(value=2000.0),
+            'rx_x_std': tk.DoubleVar(value=0.0),
             'rx_y': tk.DoubleVar(value=0.0),
+            'rx_y_std': tk.DoubleVar(value=0.0),
             'rx_z': tk.DoubleVar(value=0.0),
+            'rx_z_std': tk.DoubleVar(value=0.0),
 
             'threshold': tk.DoubleVar(value=10.0),
             'mc_samples': tk.IntVar(value=1000)
@@ -69,25 +73,58 @@ class JarsGUI(tk.Tk):
             ("Position Z (m)", 'tx_z'),
         ], column=0)
 
-        self._add_input_section(parent_frame, "Jammer", [
-            ("Power (dBm)", 'jammer_power'),
-            ("Power Std (dB)", 'jammer_power_std'),
-            ("Frequency (MHz)", 'jammer_freq'),
-            ("Position X (m)", 'jam_x'),
-            ("X Std (m)", 'jammer_x_std'),
-            ("Position Y (m)", 'jam_y'),
-            ("Y Std (m)", 'jammer_y_std'),
-            ("Position Z (m)", 'jam_z'),
-            ("Z Std (m)", 'jammer_z_std'),
-        ], column=1)
+        self._create_jammer_section(parent_frame, column=1)
 
         self._add_input_section(parent_frame, "Receiver & Threshold", [
             ("Sensitivity (dBm)", 'rx_sens'),
             ("Position X (m)", 'rx_x'),
+            ("X Std (m)", 'rx_x_std'),
             ("Position Y (m)", 'rx_y'),
+            ("Y Std (m)", 'rx_y_std'),
             ("Position Z (m)", 'rx_z'),
+            ("Z Std (m)", 'rx_z_std'),
             ("J/S Threshold (dB)", 'threshold'),
         ], column=2)
+
+    def _create_jammer_section(self, parent: ttk.Frame, column: int):
+        """
+        Creates the Jammer input section with a position distribution selector.
+        """
+        frame = ttk.LabelFrame(parent, text="Jammer")
+        frame.grid(row=0, column=column, padx=10, pady=5, sticky=(tk.W, tk.E))
+
+        for i, (label_text, var_name) in enumerate([
+            ("Power (dBm)", 'jammer_power'),
+            ("Power Std (dB)", 'jammer_power_std'),
+            ("Frequency (MHz)", 'jammer_freq'),
+        ]):
+            ttk.Label(frame, text=label_text).grid(
+                row=i, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Entry(frame, textvariable=self.vars[var_name], width=10).grid(
+                row=i, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+        ttk.Label(frame, text="Pos. Distribution").grid(
+            row=3, column=0, sticky=tk.W, padx=5, pady=2)
+        ttk.Combobox(
+            frame,
+            textvariable=self.vars['jammer_pos_dist'],
+            values=["Normal", "Uniform"],
+            state="readonly",
+            width=8,
+        ).grid(row=3, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
+
+        for i, (label_text, var_name) in enumerate([
+            ("Position X (m)", 'jam_x'),
+            ("X Spread (m)", 'jammer_x_std'),
+            ("Position Y (m)", 'jam_y'),
+            ("Y Spread (m)", 'jammer_y_std'),
+            ("Position Z (m)", 'jam_z'),
+            ("Z Spread (m)", 'jammer_z_std'),
+        ], start=4):
+            ttk.Label(frame, text=label_text).grid(
+                row=i, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Entry(frame, textvariable=self.vars[var_name], width=10).grid(
+                row=i, column=1, sticky=(tk.W, tk.E), padx=5, pady=2)
 
     def _create_button_frame(self):
         """Creates the frame containing all control buttons."""
@@ -114,7 +151,7 @@ class JarsGUI(tk.Tk):
         """Creates the label for displaying simulation results."""
         self.result_label = ttk.Label(
             self,
-            text="Press 'Run Simulation' to see results.",
+            text="Press 'Run' to see results.",
             padding="10",
             font=("", 10, "bold")
         )
@@ -202,6 +239,9 @@ class JarsGUI(tk.Tk):
             rx_sens = self.vars['rx_sens'].get()
             rx_pos = (self.vars['rx_x'].get(), self.vars['rx_y'].get(),
                       self.vars['rx_z'].get())
+            rx_x_std = self.vars['rx_x_std'].get()
+            rx_y_std = self.vars['rx_y_std'].get()
+            rx_z_std = self.vars['rx_z_std'].get()
 
             jam_power_mean = self.vars['jammer_power'].get()
             jam_power_std = self.vars['jammer_power_std'].get()
@@ -214,9 +254,19 @@ class JarsGUI(tk.Tk):
             jam_z = self.vars['jam_z'].get()
             jam_z_std = self.vars['jammer_z_std'].get()
 
-            jam_x_dist = stats.norm(loc=jam_x, scale=jam_x_std)
-            jam_y_dist = stats.norm(loc=jam_y, scale=jam_y_std)
-            jam_z_dist = stats.norm(loc=jam_z, scale=jam_z_std)
+            dist_type = self.vars['jammer_pos_dist'].get()
+
+            def _make_pos_dist(centre, spread):
+                if spread <= 0.0:
+                    return stats.norm(loc=centre, scale=1e-6)
+                if dist_type == "Uniform":
+                    return stats.uniform(loc=centre - spread,
+                                        scale=2 * spread)
+                return stats.norm(loc=centre, scale=spread)
+
+            jam_x_dist = _make_pos_dist(jam_x, jam_x_std)
+            jam_y_dist = _make_pos_dist(jam_y, jam_y_std)
+            jam_z_dist = _make_pos_dist(jam_z, jam_z_std)
 
             threshold = self.vars['threshold'].get()
             N = self.vars['mc_samples'].get()
@@ -226,7 +276,10 @@ class JarsGUI(tk.Tk):
                 jam_power_mean, jam_power_std,
                 jam_freq, jam_x_dist, jam_y_dist, jam_z_dist,
                 j_s_threshold_db=threshold,
-                N=N
+                N=N,
+                rx_x_std=rx_x_std,
+                rx_y_std=rx_y_std,
+                rx_z_std=rx_z_std,
             )
 
             fig, ax = plt.subplots()
@@ -234,7 +287,10 @@ class JarsGUI(tk.Tk):
                     alpha=0.75)
             ax.axvline(threshold, color='red', linestyle='--',
                        label=f'J/S Threshold ({threshold:.1f} dB)')
-            ax.set_title("Monte Carlo J/S Ratio Distribution")
+            ax.set_title(
+                f"Monte Carlo J/S Ratio Distribution"
+                f"\nJammer position: {dist_type}"
+            )
             ax.set_xlabel("J/S (dB)")
             ax.set_ylabel("Count")
             ax.legend()
@@ -246,9 +302,14 @@ class JarsGUI(tk.Tk):
             canvas.draw()
             canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
+            tx_recv_label = (
+                "Mean Tx signal at Rx" if result['rx_position_uncertain']
+                else "Tx signal at Rx"
+            )
             mc_text = (
-                f"Monte Carlo Simulation Complete\n"
-                f"Tx signal at Rx: {result['tx_recv_dbm']:.2f} dBm\n"
+                f"Monte Carlo Simulation Complete"
+                f"  |  Jammer position: {dist_type}\n"
+                f"{tx_recv_label}: {result['tx_recv_dbm']:.2f} dBm\n"
                 f"Mean J/S: {result['mean_js']:.2f} dB  |  "
                 f"50th pct: {result['percentile_50']:.2f} dB  |  "
                 f"90th pct: {result['percentile_90']:.2f} dB\n"
