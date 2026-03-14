@@ -30,6 +30,7 @@ jars = "jars.view:main"
 line-length = 88
 indent-width = 4
 
+[tool.ruff.lint]
 select = ["E", "F", "I", "UP", "RUF"]
 ignore = ["F841"]
 fix = true
