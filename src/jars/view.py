@@ -230,12 +230,13 @@ class JarsGUI(tk.Tk):
             )
 
             fig, ax = plt.subplots()
-            ax.hist(result['js_array'], bins=50, alpha=0.75)
+            ax.hist(result['js_array'], bins=min(50, max(10, N // 10)),
+                    alpha=0.75)
             ax.axvline(threshold, color='red', linestyle='--',
                        label=f'J/S Threshold ({threshold:.1f} dB)')
             ax.set_title("Monte Carlo J/S Ratio Distribution")
             ax.set_xlabel("J/S (dB)")
-            ax.set_ylabel("Frequency")
+            ax.set_ylabel("Count")
             ax.legend()
             ax.grid(True)
 

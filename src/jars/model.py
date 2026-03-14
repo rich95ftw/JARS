@@ -236,21 +236,20 @@ class MonteCarloModel:
         Returns:
             np.ndarray: An array containing the J/S ratio result from each run.
         """
-        j_s_results: list[float] = []
-        for i in range(self.N):
-            jammer_for_run: RadioSource = RadioSource(
-                power_dbm=self.jam_power_samples[i],
-                frequency_mhz=self.jammer_freq,
-                position=Position(
-                    self.jam_x_samples[i],
-                    self.jam_y_samples[i],
-                    self.jam_z_samples[i]
-                ),
-            )
-            j_s_run: float = j_s_ratio_db(
-                jammer_for_run,
-                self.transmitter,
-                self.receiver
-            )
-            j_s_results.append(j_s_run)
-        return np.array(j_s_results)
+        rx = self.receiver.position
+        distances_km = np.sqrt(
+            (self.jam_x_samples - rx.x) ** 2 +
+            (self.jam_y_samples - rx.y) ** 2 +
+            (self.jam_z_samples - rx.z) ** 2
+        ) / 1000.0
+
+        # Use safe_dist to avoid log10(0); those entries are overwritten by inf
+        safe_dist = np.where(distances_km > 0, distances_km, 1.0)
+        fspl = np.where(
+            distances_km > 0,
+            20 * np.log10(safe_dist) + 20 * np.log10(self.jammer_freq) + 32.44,
+            np.inf,
+        )
+        jam_recv = self.jam_power_samples - fspl
+        tx_recv = received_power_dbm(self.transmitter, rx)
+        return jam_recv - tx_recv
